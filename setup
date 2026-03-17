@@ -7,10 +7,15 @@ SKILLS_DIR="$(dirname "$GSTACK_DIR")"
 BROWSE_BIN="$GSTACK_DIR/browse/dist/browse"
 
 ensure_playwright_browser() {
-  (
-    cd "$GSTACK_DIR"
-    bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
-  ) >/dev/null 2>&1
+  # On Windows, Playwright hangs under Bun — use Node for the check
+  if [ "$(uname -s | cut -c1-5)" = "MINGW" ] || [ "$(uname -s | cut -c1-4)" = "MSYS" ] || [ -n "$WINDIR" ]; then
+    node -e 'const { chromium } = require("playwright"); chromium.launch().then(b => b.close())' >/dev/null 2>&1
+  else
+    (
+      cd "$GSTACK_DIR"
+      bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
+    ) >/dev/null 2>&1
+  fi
 }
 
 # 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
@@ -89,7 +94,21 @@ else
   echo "  (skipped skill symlinks — not inside .claude/skills/)"
 fi
 
-# 4. First-time welcome + legacy cleanup
+# 5. Install slash commands to ~/.claude/commands/gstack/
+COMMANDS_SRC="$GSTACK_DIR/commands"
+COMMANDS_DST="$HOME/.claude/commands/gstack"
+if [ -d "$COMMANDS_SRC" ]; then
+  mkdir -p "$COMMANDS_DST"
+  copied=0
+  for cmd_file in "$COMMANDS_SRC"/*.md; do
+    [ -f "$cmd_file" ] || continue
+    cp -f "$cmd_file" "$COMMANDS_DST/"
+    copied=$((copied + 1))
+  done
+  echo "  commands: $copied slash commands installed to ~/.claude/commands/gstack/"
+fi
+
+# 6. First-time welcome + legacy cleanup
 if [ ! -d "$HOME/.gstack" ]; then
   mkdir -p "$HOME/.gstack"
   echo "  Welcome! Run /gstack-upgrade anytime to stay current."
