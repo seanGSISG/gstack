@@ -94,4 +94,4 @@ if [ ! -d "$HOME/.gstack" ]; then
   mkdir -p "$HOME/.gstack"
   echo "  Welcome! Run /gstack-upgrade anytime to stay current."
 fi
-rm -f /tmp/gstack-latest-version
+rm -f "${TMPDIR:-/tmp}/gstack-latest-version"

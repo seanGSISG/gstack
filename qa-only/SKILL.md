@@ -20,9 +20,9 @@ allowed-tools:
 ```bash
 _UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
-mkdir -p ~/.gstack/sessions
-touch ~/.gstack/sessions/"$PPID"
-_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+mkdir -p ~/.gstack/sessions 2>/dev/null || mkdir -p "$USERPROFILE/.gstack/sessions" 2>/dev/null || true
+touch ~/.gstack/sessions/"$PPID" 2>/dev/null || true
+_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ' 2>/dev/null || echo "1")
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
@@ -105,9 +105,13 @@ You are a QA engineer. Test web applications like a real user — click everythi
 ```bash
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
+if [ -n "$_ROOT" ]; then
+  [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
+  [ -z "$B" ] && [ -f "$_ROOT/.claude/skills/gstack/browse/dist/browse.exe" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse.exe"
+fi
+[ -z "$B" ] && [ -x ~/.claude/skills/gstack/browse/dist/browse ] && B=~/.claude/skills/gstack/browse/dist/browse
+[ -z "$B" ] && [ -f ~/.claude/skills/gstack/browse/dist/browse.exe ] && B=~/.claude/skills/gstack/browse/dist/browse.exe
+if [ -n "$B" ]; then
   echo "READY: $B"
 else
   echo "NEEDS_SETUP"

@@ -49,7 +49,7 @@ export const COMMAND_DESCRIPTIONS: Record<string, { category: string; descriptio
   'accessibility': { category: 'Reading', description: 'Full ARIA tree' },
   // Inspection
   'js':      { category: 'Inspection', description: 'Run JavaScript expression and return result as string', usage: 'js <expr>' },
-  'eval':    { category: 'Inspection', description: 'Run JavaScript from file and return result as string (path must be under /tmp or cwd)', usage: 'eval <file>' },
+  'eval':    { category: 'Inspection', description: 'Run JavaScript from file and return result as string (path must be under temp directory or cwd)', usage: 'eval <file>' },
   'css':     { category: 'Inspection', description: 'Computed CSS value', usage: 'css <sel> <prop>' },
   'attrs':   { category: 'Inspection', description: 'Element attributes as JSON', usage: 'attrs <sel|@ref>' },
   'is':      { category: 'Inspection', description: 'State check (visible/hidden/enabled/disabled/checked/editable/focused)', usage: 'is <prop> <sel>' },

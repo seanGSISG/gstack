@@ -70,7 +70,7 @@ function generateSnapshotFlags(): string {
   lines.push('```');
   lines.push('');
   lines.push('All flags can be combined freely. `-o` only applies when `-a` is also used.');
-  lines.push('Example: `$B snapshot -i -a -C -o /tmp/annotated.png`');
+  lines.push('Example: `$B snapshot -i -a -C -o annotated.png`');
   lines.push('');
   lines.push('**Ref numbering:** @e refs are assigned sequentially (@e1, @e2, ...) in tree order.');
   lines.push('@c refs from `-C` are numbered separately (@c1, @c2, ...).');
@@ -100,9 +100,9 @@ function generatePreamble(): string {
 \`\`\`bash
 _UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
-mkdir -p ~/.gstack/sessions
-touch ~/.gstack/sessions/"$PPID"
-_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+mkdir -p ~/.gstack/sessions 2>/dev/null || mkdir -p "$USERPROFILE/.gstack/sessions" 2>/dev/null || true
+touch ~/.gstack/sessions/"$PPID" 2>/dev/null || true
+_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ' 2>/dev/null || echo "1")
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
@@ -167,9 +167,13 @@ function generateBrowseSetup(): string {
 \`\`\`bash
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
+if [ -n "$_ROOT" ]; then
+  [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
+  [ -z "$B" ] && [ -f "$_ROOT/.claude/skills/gstack/browse/dist/browse.exe" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse.exe"
+fi
+[ -z "$B" ] && [ -x ~/.claude/skills/gstack/browse/dist/browse ] && B=~/.claude/skills/gstack/browse/dist/browse
+[ -z "$B" ] && [ -f ~/.claude/skills/gstack/browse/dist/browse.exe ] && B=~/.claude/skills/gstack/browse/dist/browse.exe
+if [ -n "$B" ]; then
   echo "READY: $B"
 else
   echo "NEEDS_SETUP"

@@ -104,6 +104,20 @@ const keyCache = new Map<string, Buffer>();
  * Find which browsers are installed (have a cookie DB on disk).
  */
 export function findInstalledBrowsers(): BrowserInfo[] {
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return BROWSER_REGISTRY.filter(b => {
+      // Map macOS data dirs to Windows equivalents
+      const winDataDir = b.dataDir
+        .replace('Google/Chrome/', 'Google\\Chrome\\User Data\\')
+        .replace('BraveSoftware/Brave-Browser/', 'BraveSoftware\\Brave-Browser\\User Data\\')
+        .replace('Microsoft Edge/', 'Microsoft\\Edge\\User Data\\')
+        .replace('Arc/User Data/', 'Arc\\User Data\\')
+        .replace('Comet/', 'Comet\\User Data\\');
+      const dbPath = path.join(localAppData, winDataDir, 'Default', 'Cookies');
+      try { return fs.existsSync(dbPath); } catch { return false; }
+    });
+  }
   const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
   return BROWSER_REGISTRY.filter(b => {
     const dbPath = path.join(appSupport, b.dataDir, 'Default', 'Cookies');
@@ -210,8 +224,20 @@ function validateProfile(profile: string): void {
 
 function getCookieDbPath(browser: BrowserInfo, profile: string): string {
   validateProfile(profile);
-  const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
-  const dbPath = path.join(appSupport, browser.dataDir, profile, 'Cookies');
+  let dbPath: string;
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    const winDataDir = browser.dataDir
+      .replace('Google/Chrome/', 'Google\\Chrome\\User Data\\')
+      .replace('BraveSoftware/Brave-Browser/', 'BraveSoftware\\Brave-Browser\\User Data\\')
+      .replace('Microsoft Edge/', 'Microsoft\\Edge\\User Data\\')
+      .replace('Arc/User Data/', 'Arc\\User Data\\')
+      .replace('Comet/', 'Comet\\User Data\\');
+    dbPath = path.join(localAppData, winDataDir, profile, 'Cookies');
+  } else {
+    const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
+    dbPath = path.join(appSupport, browser.dataDir, profile, 'Cookies');
+  }
   if (!fs.existsSync(dbPath)) {
     throw new CookieImportError(
       `${browser.name} is not installed (no cookie database at ${dbPath})`,
@@ -241,7 +267,7 @@ function openDb(dbPath: string, browserName: string): Database {
 }
 
 function openDbFromCopy(dbPath: string, browserName: string): Database {
-  const tmpPath = `/tmp/browse-cookies-${browserName.toLowerCase()}-${crypto.randomUUID()}.db`;
+  const tmpPath = path.join(os.tmpdir(), `browse-cookies-${browserName.toLowerCase()}-${crypto.randomUUID()}.db`);
   try {
     fs.copyFileSync(dbPath, tmpPath);
     // Also copy WAL and SHM if they exist (for consistent reads)
@@ -274,6 +300,16 @@ function openDbFromCopy(dbPath: string, browserName: string): Database {
 // ─── Internal: Keychain Access (async, 10s timeout) ─────────────
 
 async function getDerivedKey(browser: BrowserInfo): Promise<Buffer> {
+  if (process.platform === 'win32') {
+    // Windows uses DPAPI — no keychain needed, return a dummy key.
+    // Windows Chromium cookies with v10 prefix use DPAPI, not AES-CBC.
+    // For now, we can only read unencrypted cookies on Windows.
+    throw new CookieImportError(
+      `Cookie decryption on Windows is not yet supported (requires DPAPI). Only unencrypted cookies can be imported.`,
+      'unsupported_platform',
+    );
+  }
+
   const cached = keyCache.get(browser.keychainService);
   if (cached) return cached;
 

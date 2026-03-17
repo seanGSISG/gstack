@@ -9,6 +9,7 @@ import type { BrowserManager } from './browser-manager';
 import { findInstalledBrowsers, importCookies } from './cookie-import-browser';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 export async function handleWriteCommand(
   command: string,
@@ -44,11 +45,48 @@ export async function handleWriteCommand(
     case 'click': {
       const selector = args[0];
       if (!selector) throw new Error('Usage: browse click <selector>');
+
+      // Auto-route: if ref points to a real <option> inside a <select>, use selectOption
+      const role = bm.getRefRole(selector);
+      if (role === 'option') {
+        const resolved = await bm.resolveRef(selector);
+        if ('locator' in resolved) {
+          const optionInfo = await resolved.locator.evaluate(el => {
+            if (el.tagName !== 'OPTION') return null; // custom [role=option], not real <option>
+            const option = el as HTMLOptionElement;
+            const select = option.closest('select');
+            if (!select) return null;
+            return { value: option.value, text: option.text };
+          });
+          if (optionInfo) {
+            await resolved.locator.locator('xpath=ancestor::select').selectOption(optionInfo.value, { timeout: 5000 });
+            return `Selected "${optionInfo.text}" (auto-routed from click on <option>) → now at ${page.url()}`;
+          }
+          // Real <option> with no parent <select> or custom [role=option] — fall through to normal click
+        }
+      }
+
       const resolved = await bm.resolveRef(selector);
-      if ('locator' in resolved) {
-        await resolved.locator.click({ timeout: 5000 });
-      } else {
-        await page.click(resolved.selector, { timeout: 5000 });
+      try {
+        if ('locator' in resolved) {
+          await resolved.locator.click({ timeout: 5000 });
+        } else {
+          await page.click(resolved.selector, { timeout: 5000 });
+        }
+      } catch (err: any) {
+        // Enhanced error guidance: clicking <option> elements always fails (not visible / timeout)
+        const isOption = 'locator' in resolved
+          ? await resolved.locator.evaluate(el => el.tagName === 'OPTION').catch(() => false)
+          : await page.evaluate(
+              (sel: string) => document.querySelector(sel)?.tagName === 'OPTION',
+              (resolved as { selector: string }).selector
+            ).catch(() => false);
+        if (isOption) {
+          throw new Error(
+            `Cannot click <option> elements. Use 'browse select <parent-select> <value>' instead of 'click' for dropdown options.`
+          );
+        }
+        throw err;
       }
       // Wait briefly for any navigation/DOM update
       await page.waitForLoadState('domcontentloaded').catch(() => {});
@@ -238,9 +276,9 @@ export async function handleWriteCommand(
       if (!filePath) throw new Error('Usage: browse cookie-import <json-file>');
       // Path validation — prevent reading arbitrary files
       if (path.isAbsolute(filePath)) {
-        const safeDirs = ['/tmp', process.cwd()];
+        const safeDirs = [os.tmpdir(), process.cwd()];
         const resolved = path.resolve(filePath);
-        if (!safeDirs.some(dir => resolved === dir || resolved.startsWith(dir + '/'))) {
+        if (!safeDirs.some(dir => resolved === dir || resolved.startsWith(dir + path.sep))) {
           throw new Error(`Path must be within: ${safeDirs.join(', ')}`);
         }
       }
@@ -298,7 +336,12 @@ export async function handleWriteCommand(
 
       const pickerUrl = `http://127.0.0.1:${port}/cookie-picker`;
       try {
-        Bun.spawn(['open', pickerUrl], { stdout: 'ignore', stderr: 'ignore' });
+        const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'linux' ? 'xdg-open' : 'open';
+        if (process.platform === 'win32') {
+          Bun.spawn(['cmd', '/c', 'start', pickerUrl], { stdout: 'ignore', stderr: 'ignore' });
+        } else {
+          Bun.spawn([openCmd, pickerUrl], { stdout: 'ignore', stderr: 'ignore' });
+        }
       } catch {
         // open may fail silently — URL is in the message below
       }

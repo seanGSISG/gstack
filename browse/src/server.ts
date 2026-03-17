@@ -278,9 +278,13 @@ async function shutdown() {
   process.exit(0);
 }
 
-// Handle signals
+// Handle signals (SIGTERM/SIGINT work on all platforms in Bun/Node)
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+// Windows: handle CTRL+BREAK and process exit
+if (process.platform === 'win32') {
+  process.on('SIGHUP', shutdown);
+}
 
 // ─── Start ─────────────────────────────────────────────────────
 async function start() {

@@ -21,9 +21,9 @@ allowed-tools:
 ```bash
 _UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
-mkdir -p ~/.gstack/sessions
-touch ~/.gstack/sessions/"$PPID"
-_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
+mkdir -p ~/.gstack/sessions 2>/dev/null || mkdir -p "$USERPROFILE/.gstack/sessions" 2>/dev/null || true
+touch ~/.gstack/sessions/"$PPID" 2>/dev/null || true
+_SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ' 2>/dev/null || echo "1")
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
@@ -91,9 +91,13 @@ Auto-shuts down after 30 min idle. State persists between calls (cookies, tabs, 
 ```bash
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
+if [ -n "$_ROOT" ]; then
+  [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
+  [ -z "$B" ] && [ -f "$_ROOT/.claude/skills/gstack/browse/dist/browse.exe" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse.exe"
+fi
+[ -z "$B" ] && [ -x ~/.claude/skills/gstack/browse/dist/browse ] && B=~/.claude/skills/gstack/browse/dist/browse
+[ -z "$B" ] && [ -f ~/.claude/skills/gstack/browse/dist/browse.exe ] && B=~/.claude/skills/gstack/browse/dist/browse.exe
+if [ -n "$B" ]; then
   echo "READY: $B"
 else
   echo "NEEDS_SETUP"
@@ -316,12 +320,12 @@ The snapshot is your primary tool for understanding and interacting with pages.
 -s <sel>  --selector              Scope to CSS selector
 -D        --diff                  Unified diff against previous snapshot (first call stores baseline)
 -a        --annotate              Annotated screenshot with red overlay boxes and ref labels
--o <path> --output                Output path for annotated screenshot (default: /tmp/browse-annotated.png)
+-o <path> --output                Output path for annotated screenshot (default: <tmpdir>/browse-annotated.png)
 -C        --cursor-interactive    Cursor-interactive elements (@c refs — divs with pointer, onclick)
 ```
 
 All flags can be combined freely. `-o` only applies when `-a` is also used.
-Example: `$B snapshot -i -a -C -o /tmp/annotated.png`
+Example: `$B snapshot -i -a -C -o annotated.png`
 
 **Ref numbering:** @e refs are assigned sequentially (@e1, @e2, ...) in tree order.
 @c refs from `-C` are numbered separately (@c1, @c2, ...).
@@ -391,7 +395,7 @@ Refs are invalidated on navigation — run `snapshot` again after `goto`.
 | `cookies` | All cookies as JSON |
 | `css <sel> <prop>` | Computed CSS value |
 | `dialog [--clear]` | Dialog messages |
-| `eval <file>` | Run JavaScript from file and return result as string (path must be under /tmp or cwd) |
+| `eval <file>` | Run JavaScript from file and return result as string (path must be under temp directory or cwd) |
 | `is <prop> <sel>` | State check (visible/hidden/enabled/disabled/checked/editable/focused) |
 | `js <expr>` | Run JavaScript expression and return result as string |
 | `network [--clear]` | Network requests |

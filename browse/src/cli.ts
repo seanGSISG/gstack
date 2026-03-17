@@ -26,7 +26,7 @@ export function resolveServerScript(
   }
 
   // Dev mode: cli.ts runs directly from browse/src
-  if (metaDir.startsWith('/') && !metaDir.includes('$bunfs')) {
+  if (!metaDir.includes('$bunfs') && (metaDir.startsWith('/') || /^[a-zA-Z]:/.test(metaDir))) {
     const direct = path.resolve(metaDir, 'server.ts');
     if (fs.existsSync(direct)) {
       return direct;
@@ -80,7 +80,14 @@ function isProcessAlive(pid: number): boolean {
 async function killServer(pid: number): Promise<void> {
   if (!isProcessAlive(pid)) return;
 
-  try { process.kill(pid, 'SIGTERM'); } catch { return; }
+  try {
+    // SIGTERM is not supported on Windows; use platform-appropriate signal
+    if (process.platform === 'win32') {
+      Bun.spawnSync(['taskkill', '/PID', String(pid), '/F'], { stdout: 'pipe', stderr: 'pipe', timeout: 3000 });
+    } else {
+      process.kill(pid, 'SIGTERM');
+    }
+  } catch { return; }
 
   // Wait up to 2s for graceful shutdown
   const deadline = Date.now() + 2000;
@@ -90,7 +97,13 @@ async function killServer(pid: number): Promise<void> {
 
   // Force kill if still alive
   if (isProcessAlive(pid)) {
-    try { process.kill(pid, 'SIGKILL'); } catch {}
+    try {
+      if (process.platform === 'win32') {
+        Bun.spawnSync(['taskkill', '/PID', String(pid), '/F'], { stdout: 'pipe', stderr: 'pipe', timeout: 3000 });
+      } else {
+        process.kill(pid, 'SIGKILL');
+      }
+    } catch {}
   }
 }
 
@@ -99,20 +112,31 @@ async function killServer(pid: number): Promise<void> {
  * Verifies PID ownership before sending signals.
  */
 function cleanupLegacyState(): void {
+  const tmpDir = require('os').tmpdir();
   try {
-    const files = fs.readdirSync('/tmp').filter(f => f.startsWith('browse-server') && f.endsWith('.json'));
+    const files = fs.readdirSync(tmpDir).filter(f => f.startsWith('browse-server') && f.endsWith('.json'));
     for (const file of files) {
-      const fullPath = `/tmp/${file}`;
+      const fullPath = path.join(tmpDir, file);
       try {
         const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
         if (data.pid && isProcessAlive(data.pid)) {
           // Verify this is actually a browse server before killing
-          const check = Bun.spawnSync(['ps', '-p', String(data.pid), '-o', 'command='], {
-            stdout: 'pipe', stderr: 'pipe', timeout: 2000,
-          });
-          const cmd = check.stdout.toString().trim();
-          if (cmd.includes('bun') || cmd.includes('server.ts')) {
-            try { process.kill(data.pid, 'SIGTERM'); } catch {}
+          if (process.platform === 'win32') {
+            const check = Bun.spawnSync(['tasklist', '/FI', `PID eq ${data.pid}`, '/FO', 'CSV', '/NH'], {
+              stdout: 'pipe', stderr: 'pipe', timeout: 2000,
+            });
+            const out = check.stdout.toString().trim();
+            if (out.includes('bun')) {
+              try { Bun.spawnSync(['taskkill', '/PID', String(data.pid), '/F'], { stdout: 'pipe', stderr: 'pipe', timeout: 3000 }); } catch {}
+            }
+          } else {
+            const check = Bun.spawnSync(['ps', '-p', String(data.pid), '-o', 'command='], {
+              stdout: 'pipe', stderr: 'pipe', timeout: 2000,
+            });
+            const cmd = check.stdout.toString().trim();
+            if (cmd.includes('bun') || cmd.includes('server.ts')) {
+              try { process.kill(data.pid, 'SIGTERM'); } catch {}
+            }
           }
         }
         fs.unlinkSync(fullPath);
@@ -121,14 +145,14 @@ function cleanupLegacyState(): void {
       }
     }
     // Clean up legacy log files too
-    const logFiles = fs.readdirSync('/tmp').filter(f =>
+    const logFiles = fs.readdirSync(tmpDir).filter(f =>
       f.startsWith('browse-console') || f.startsWith('browse-network') || f.startsWith('browse-dialog')
     );
     for (const file of logFiles) {
-      try { fs.unlinkSync(`/tmp/${file}`); } catch {}
+      try { fs.unlinkSync(path.join(tmpDir, file)); } catch {}
     }
   } catch {
-    // /tmp read failed — skip legacy cleanup
+    // tmp dir read failed — skip legacy cleanup
   }
 }
 
