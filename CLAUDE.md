@@ -1,4 +1,16 @@
-# gstack development
+# gstack development (Windows-compatible fork)
+
+This is a fork of [garrytan/gstack](https://github.com/garrytan/gstack) with
+Windows compatibility patches. Upstream: https://github.com/garrytan/gstack
+
+## Windows compatibility notes
+
+- All TypeScript source uses `os.tmpdir()` and `path.sep` instead of hardcoded `/tmp` and `/`
+- Process management uses `taskkill`/`tasklist` on Windows instead of POSIX signals
+- Browser cookie paths resolve to `%LOCALAPPDATA%` on Windows
+- SKILL.md preamble and browse setup detect `.exe` binaries and fall back to `$USERPROFILE`
+- Shell scripts (`setup`, `bin/*`) run in Git Bash (included with Claude Code on Windows)
+- Cookie decryption from browser imports is not yet supported on Windows (requires DPAPI)
 
 ## Commands
 

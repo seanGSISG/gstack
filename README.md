@@ -1,4 +1,7 @@
-# gstack
+# gstack (Windows-compatible fork)
+
+> **Fork of [garrytan/gstack](https://github.com/garrytan/gstack) with Windows compatibility.**
+> Upstream: https://github.com/garrytan/gstack
 
 **gstack turns Claude Code from one generic assistant into a team of specialists you can summon on demand.**
 
@@ -99,13 +102,15 @@ This is the setup I use. One person, ten parallel agents, each with the right co
 
 ## Install
 
-**Requirements:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Git](https://git-scm.com/), [Bun](https://bun.sh/) v1.0+. `/browse` compiles a native binary — works on macOS and Linux (x64 and arm64).
+**Requirements:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Git](https://git-scm.com/), [Bun](https://bun.sh/) v1.0+. `/browse` compiles a native binary — works on macOS, Linux (x64 and arm64), and Windows.
+
+> **Windows users:** This fork includes full Windows compatibility. Use the install commands below with this repo URL instead of the upstream.
 
 ### Step 1: Install on your machine
 
 Open Claude Code and paste this. Claude will do the rest.
 
-> Install gstack: run `git clone https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup` then add a "gstack" section to CLAUDE.md that says to use the /browse skill from gstack for all web browsing, never use mcp\_\_claude-in-chrome\_\_\* tools, and lists the available skills: /plan-ceo-review, /plan-eng-review, /review, /ship, /browse, /qa, /qa-only, /setup-browser-cookies, /retro, /document-release. Then ask the user if they also want to add gstack to the current project so teammates get it.
+> Install gstack: run `git clone https://github.com/seanGSISG/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup` then add a "gstack" section to CLAUDE.md that says to use the /browse skill from gstack for all web browsing, never use mcp\_\_claude-in-chrome\_\_\* tools, and lists the available skills: /plan-ceo-review, /plan-eng-review, /review, /ship, /browse, /qa, /qa-only, /setup-browser-cookies, /retro, /document-release. Then ask the user if they also want to add gstack to the current project so teammates get it.
 
 ### Step 2: Add to your repo so teammates get it (optional)
 
@@ -613,6 +618,20 @@ Claude: Analyzing 21 files changed across 3 commits. Found 8 documentation files
 It also polishes CHANGELOG voice (without ever overwriting entries), cleans up completed TODOS, checks cross-doc consistency, and asks about VERSION bumps only when appropriate.
 
 ---
+
+## Windows Compatibility
+
+This fork adds full Windows support to gstack. Changes from upstream:
+
+- **Temp paths:** All hardcoded `/tmp` references replaced with `os.tmpdir()` (resolves to `%TEMP%` on Windows)
+- **Path separators:** Safe directory validation uses `path.sep` instead of hardcoded `/`
+- **Process management:** Uses `taskkill`/`tasklist` on Windows instead of POSIX signals (`SIGTERM`/`SIGKILL`) and `ps`
+- **Browser cookie paths:** Resolves to `%LOCALAPPDATA%` on Windows (e.g., `AppData\Local\Google\Chrome\User Data\`)
+- **URL opener:** Uses `cmd /c start` on Windows, `xdg-open` on Linux, `open` on macOS
+- **SKILL.md preamble:** Falls back to `$USERPROFILE` for session directory, detects `.exe` binaries
+- **Shell scripts:** Work in Git Bash (bundled with Claude Code on Windows)
+
+**Known limitation:** Cookie decryption from browser imports (`/setup-browser-cookies`) is not yet supported on Windows. Windows Chromium uses DPAPI for cookie encryption, which differs from macOS Keychain. Unencrypted cookies and JSON file imports (`cookie-import <file>`) still work.
 
 ## Troubleshooting
 
