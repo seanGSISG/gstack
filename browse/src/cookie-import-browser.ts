@@ -32,11 +32,20 @@
  *   └──────────────────────────────────────────────────────────────────┘
  */
 
-import { Database } from 'bun:sqlite';
+// Dynamic import: bun:sqlite is only available under Bun runtime.
+// On Node.js (Windows), cookie DB decryption is not supported.
+let Database: any;
+try {
+  Database = require('bun:sqlite').Database;
+} catch {
+  // Not running under Bun — Database will be undefined.
+  // Cookie import from browser DBs will throw a clear error.
+}
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawn as cpSpawn } from 'child_process';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -320,12 +329,20 @@ async function getDerivedKey(browser: BrowserInfo): Promise<Buffer> {
 }
 
 async function getKeychainPassword(service: string): Promise<string> {
-  // Use async Bun.spawn with timeout to avoid blocking the event loop.
+  // Use async spawn with timeout to avoid blocking the event loop.
   // macOS may show an Allow/Deny dialog that blocks until the user responds.
-  const proc = Bun.spawn(
-    ['security', 'find-generic-password', '-s', service, '-w'],
-    { stdout: 'pipe', stderr: 'pipe' },
-  );
+  const proc = cpSpawn('security', ['find-generic-password', '-s', service, '-w'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stdout = '';
+  let stderr = '';
+  proc.stdout!.on('data', (c: Buffer) => { stdout += c; });
+  proc.stderr!.on('data', (c: Buffer) => { stderr += c; });
+
+  const exitPromise = new Promise<number>((resolve) => {
+    proc.on('close', (code) => resolve(code ?? 1));
+  });
 
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => {
@@ -339,9 +356,7 @@ async function getKeychainPassword(service: string): Promise<string> {
   );
 
   try {
-    const exitCode = await Promise.race([proc.exited, timeout]);
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await Promise.race([exitPromise, timeout]);
 
     if (exitCode !== 0) {
       // Distinguish denied vs not found vs other

@@ -164,7 +164,12 @@ async function startServer(): Promise<ServerState> {
   try { fs.unlinkSync(config.stateFile); } catch {}
 
   // Start server as detached background process
-  const proc = Bun.spawn(['bun', 'run', SERVER_SCRIPT], {
+  // On Windows, use Node.js for the server because Playwright's chromium.launch()
+  // hangs under Bun on Windows. The server.js bundle is Node-compatible.
+  const serverBundle = path.resolve(path.dirname(process.execPath), 'server.js');
+  const useNode = process.platform === 'win32' && fs.existsSync(serverBundle);
+  const cmd = useNode ? ['node', serverBundle] : ['bun', 'run', SERVER_SCRIPT];
+  const proc = Bun.spawn(cmd, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, BROWSE_STATE_FILE: config.stateFile },
   });

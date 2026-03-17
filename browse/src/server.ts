@@ -2,10 +2,13 @@
  * gstack browse server — persistent Chromium daemon
  *
  * Architecture:
- *   Bun.serve HTTP on localhost → routes commands to Playwright
+ *   HTTP server on localhost → routes commands to Playwright
  *   Console/network/dialog buffers: CircularBuffer in-memory + async disk flush
  *   Chromium crash → server EXITS with clear error (CLI auto-restarts)
  *   Auto-shutdown after BROWSE_IDLE_TIMEOUT (default 30 min)
+ *
+ * Cross-runtime: works under both Bun and Node.js (needed because
+ * Playwright's chromium.launch() hangs under Bun on Windows).
  *
  * State:
  *   State file: <project-root>/.gstack/browse.json (set via BROWSE_STATE_FILE env)
@@ -24,6 +27,9 @@ import { resolveConfig, ensureStateDir, readVersionHash } from './config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as http from 'http';
+import * as net from 'net';
+import { fileURLToPath } from 'url';
 
 // ─── Config ─────────────────────────────────────────────────────
 const config = resolveConfig();
@@ -33,11 +39,6 @@ ensureStateDir(config);
 const AUTH_TOKEN = crypto.randomUUID();
 const BROWSE_PORT = parseInt(process.env.BROWSE_PORT || '0', 10);
 const IDLE_TIMEOUT_MS = parseInt(process.env.BROWSE_IDLE_TIMEOUT || '1800000', 10); // 30 min
-
-function validateAuth(req: Request): boolean {
-  const header = req.headers.get('authorization');
-  return header === `Bearer ${AUTH_TOKEN}`;
-}
 
 // ─── Help text (auto-generated from COMMAND_DESCRIPTIONS) ────────
 function generateHelpText(): string {
@@ -104,7 +105,8 @@ async function flushBuffers() {
       const lines = entries.map(e =>
         `[${new Date(e.timestamp).toISOString()}] [${e.level}] ${e.text}`
       ).join('\n') + '\n';
-      await Bun.write(CONSOLE_LOG_PATH, (await Bun.file(CONSOLE_LOG_PATH).text().catch(() => '')) + lines);
+      const existing = (() => { try { return fs.readFileSync(CONSOLE_LOG_PATH, 'utf-8'); } catch { return ''; } })();
+      fs.writeFileSync(CONSOLE_LOG_PATH, existing + lines);
       lastConsoleFlushed = consoleBuffer.totalAdded;
     }
 
@@ -115,7 +117,8 @@ async function flushBuffers() {
       const lines = entries.map(e =>
         `[${new Date(e.timestamp).toISOString()}] ${e.method} ${e.url} → ${e.status || 'pending'} (${e.duration || '?'}ms, ${e.size || '?'}B)`
       ).join('\n') + '\n';
-      await Bun.write(NETWORK_LOG_PATH, (await Bun.file(NETWORK_LOG_PATH).text().catch(() => '')) + lines);
+      const existing = (() => { try { return fs.readFileSync(NETWORK_LOG_PATH, 'utf-8'); } catch { return ''; } })();
+      fs.writeFileSync(NETWORK_LOG_PATH, existing + lines);
       lastNetworkFlushed = networkBuffer.totalAdded;
     }
 
@@ -126,7 +129,8 @@ async function flushBuffers() {
       const lines = entries.map(e =>
         `[${new Date(e.timestamp).toISOString()}] [${e.type}] "${e.message}" → ${e.action}${e.response ? ` "${e.response}"` : ''}`
       ).join('\n') + '\n';
-      await Bun.write(DIALOG_LOG_PATH, (await Bun.file(DIALOG_LOG_PATH).text().catch(() => '')) + lines);
+      const existing = (() => { try { return fs.readFileSync(DIALOG_LOG_PATH, 'utf-8'); } catch { return ''; } })();
+      fs.writeFileSync(DIALOG_LOG_PATH, existing + lines);
       lastDialogFlushed = dialogBuffer.totalAdded;
     }
   } catch {
@@ -161,17 +165,22 @@ export { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS };
 const browserManager = new BrowserManager();
 let isShuttingDown = false;
 
+// Check if a port is available by attempting to listen on it
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', () => resolve(false));
+    srv.once('listening', () => { srv.close(() => resolve(true)); });
+    srv.listen(port, '127.0.0.1');
+  });
+}
+
 // Find port: explicit BROWSE_PORT, or random in 10000-60000
 async function findPort(): Promise<number> {
   // Explicit port override (for debugging)
   if (BROWSE_PORT) {
-    try {
-      const testServer = Bun.serve({ port: BROWSE_PORT, fetch: () => new Response('ok') });
-      testServer.stop();
-      return BROWSE_PORT;
-    } catch {
-      throw new Error(`[browse] Port ${BROWSE_PORT} (from BROWSE_PORT env) is in use`);
-    }
+    if (await isPortAvailable(BROWSE_PORT)) return BROWSE_PORT;
+    throw new Error(`[browse] Port ${BROWSE_PORT} (from BROWSE_PORT env) is in use`);
   }
 
   // Random port with retry
@@ -180,13 +189,7 @@ async function findPort(): Promise<number> {
   const MAX_RETRIES = 5;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const port = MIN_PORT + Math.floor(Math.random() * (MAX_PORT - MIN_PORT));
-    try {
-      const testServer = Bun.serve({ port, fetch: () => new Response('ok') });
-      testServer.stop();
-      return port;
-    } catch {
-      continue;
-    }
+    if (await isPortAvailable(port)) return port;
   }
   throw new Error(`[browse] No available port after ${MAX_RETRIES} attempts in range ${MIN_PORT}-${MAX_PORT}`);
 }
@@ -299,57 +302,86 @@ async function start() {
   await browserManager.launch();
 
   const startTime = Date.now();
-  const server = Bun.serve({
-    port,
-    hostname: '127.0.0.1',
-    fetch: async (req) => {
-      resetIdleTimer();
 
-      const url = new URL(req.url);
+  // Helper: read HTTP request body as string
+  function readBody(req: http.IncomingMessage): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+      req.on('error', reject);
+    });
+  }
+
+  // Helper: send a Response object via http.ServerResponse
+  async function sendResponse(res: http.ServerResponse, response: Response): Promise<void> {
+    const headers: Record<string, string> = {};
+    response.headers.forEach((v, k) => { headers[k] = v; });
+    res.writeHead(response.status, headers);
+    res.end(await response.text());
+  }
+
+  const server = http.createServer(async (req, res) => {
+    try {
+      resetIdleTimer();
+      const url = new URL(req.url!, `http://${req.headers.host}`);
 
       // Cookie picker routes — no auth required (localhost-only)
       if (url.pathname.startsWith('/cookie-picker')) {
-        return handleCookiePickerRoute(url, req, browserManager);
+        // Adapt http.IncomingMessage to Request for cookie picker handler
+        const body = ['POST', 'PUT', 'PATCH'].includes(req.method || '') ? await readBody(req) : undefined;
+        const webReq = new Request(url.toString(), {
+          method: req.method,
+          headers: req.headers as Record<string, string>,
+          body,
+        });
+        return await sendResponse(res, await handleCookiePickerRoute(url, webReq, browserManager));
       }
 
       // Health check — no auth required (now async)
       if (url.pathname === '/health') {
         const healthy = await browserManager.isHealthy();
-        return new Response(JSON.stringify({
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
           status: healthy ? 'healthy' : 'unhealthy',
           uptime: Math.floor((Date.now() - startTime) / 1000),
           tabs: browserManager.getTabCount(),
           currentUrl: browserManager.getCurrentUrl(),
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        }));
+        return;
       }
 
       // All other endpoints require auth
-      if (!validateAuth(req)) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      const authHeader = req.headers.authorization;
+      if (authHeader !== `Bearer ${AUTH_TOKEN}`) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
       }
 
       if (url.pathname === '/command' && req.method === 'POST') {
-        const body = await req.json();
-        return handleCommand(body);
+        const body = JSON.parse(await readBody(req));
+        return await sendResponse(res, await handleCommand(body));
       }
 
-      return new Response('Not found', { status: 404 });
-    },
+      res.writeHead(404);
+      res.end('Not found');
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message || String(err) }));
+    }
   });
 
+  server.listen(port, '127.0.0.1');
+
   // Write state file (atomic: write .tmp then rename)
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const state = {
     pid: process.pid,
     port,
     token: AUTH_TOKEN,
     startedAt: new Date().toISOString(),
-    serverPath: path.resolve(import.meta.dir, 'server.ts'),
+    serverPath: path.resolve(__dirname, 'server.ts'),
     binaryVersion: readVersionHash() || undefined,
   };
   const tmpFile = config.stateFile + '.tmp';

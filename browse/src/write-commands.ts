@@ -10,6 +10,7 @@ import { findInstalledBrowsers, importCookies } from './cookie-import-browser';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawn as cpSpawn } from 'child_process';
 
 export async function handleWriteCommand(
   command: string,
@@ -338,9 +339,9 @@ export async function handleWriteCommand(
       try {
         const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'linux' ? 'xdg-open' : 'open';
         if (process.platform === 'win32') {
-          Bun.spawn(['cmd', '/c', 'start', pickerUrl], { stdout: 'ignore', stderr: 'ignore' });
+          cpSpawn('cmd', ['/c', 'start', pickerUrl], { stdio: 'ignore', detached: true }).unref();
         } else {
-          Bun.spawn([openCmd, pickerUrl], { stdout: 'ignore', stderr: 'ignore' });
+          cpSpawn(openCmd, [pickerUrl], { stdio: 'ignore', detached: true }).unref();
         }
       } catch {
         // open may fail silently — URL is in the message below
