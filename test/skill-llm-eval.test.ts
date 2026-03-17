@@ -1,17 +1,14 @@
 /**
  * LLM-as-a-Judge evals for generated SKILL.md quality.
  *
- * Uses the Anthropic API directly (not Agent SDK) to evaluate whether
- * generated command docs are clear, complete, and actionable for an AI agent.
+ * Uses `claude -p` subprocess to evaluate whether generated command docs
+ * are clear, complete, and actionable for an AI agent.
  *
- * Requires: ANTHROPIC_API_KEY env var (or EVALS=1 with key already set)
+ * Works with Claude Code Max subscription (no ANTHROPIC_API_KEY required).
  * Run: EVALS=1 bun run test:eval
- *
- * Cost: ~$0.05-0.15 per run (sonnet)
  */
 
 import { describe, test, expect, afterAll } from 'bun:test';
-import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { callJudge, judge } from './helpers/llm-judge';
@@ -19,7 +16,7 @@ import type { JudgeScore } from './helpers/llm-judge';
 import { EvalCollector } from './helpers/eval-store';
 
 const ROOT = path.resolve(import.meta.dir, '..');
-// Run when EVALS=1 is set (requires ANTHROPIC_API_KEY in env)
+// Run when EVALS=1 is set (uses claude -p subprocess, no API key needed)
 const evalsEnabled = !!process.env.EVALS;
 const describeEval = evalsEnabled ? describe : describe.skip;
 
@@ -171,13 +168,7 @@ describeEval('LLM-as-judge quality evals', () => {
 | \`is <prop> <sel>\` | State check (visible/hidden/enabled/disabled/checked/editable/focused) |
 | \`console [--clear\\|--errors]\` | Console messages (--errors filters to error/warning) |`;
 
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: `You are comparing two versions of CLI documentation for an AI coding agent.
+    const result = await callJudge<{ winner: string; reasoning: string; a_score: number; b_score: number }>(`You are comparing two versions of CLI documentation for an AI coding agent.
 
 VERSION A (baseline — hand-maintained):
 ${baseline}
@@ -193,14 +184,7 @@ Which version is better for an AI agent trying to use these commands? Consider:
 Respond with ONLY valid JSON:
 {"winner": "A" or "B" or "tie", "reasoning": "brief explanation", "a_score": N, "b_score": N}
 
-Scores are 1-5 overall quality.`,
-      }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error(`Judge returned non-JSON: ${text.slice(0, 200)}`);
-    const result = JSON.parse(jsonMatch[0]);
+Scores are 1-5 overall quality.`);
     console.log('Regression comparison:', JSON.stringify(result, null, 2));
 
     evalCollector?.addTest({
@@ -311,16 +295,16 @@ ${section}`);
 // --- Part 7: Cross-skill consistency judge (C7) ---
 
 describeEval('Cross-skill consistency evals', () => {
-  test('greptile-history patterns are consistent across all skills', async () => {
+  test('coderabbit-history patterns are consistent across all skills', async () => {
     const t0 = Date.now();
     const reviewContent = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
     const shipContent = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
-    const triageContent = fs.readFileSync(path.join(ROOT, 'review', 'greptile-triage.md'), 'utf-8');
+    const triageContent = fs.readFileSync(path.join(ROOT, 'review', 'coderabbit-triage.md'), 'utf-8');
     const retroContent = fs.readFileSync(path.join(ROOT, 'retro', 'SKILL.md'), 'utf-8');
 
     const extractGrepLines = (content: string, filename: string) => {
       const lines = content.split('\n')
-        .filter(l => /greptile|history\.md|REMOTE_SLUG/i.test(l))
+        .filter(l => /coderabbit|history\.md|REMOTE_SLUG/i.test(l))
         .map(l => l.trim());
       return `--- ${filename} ---\n${lines.join('\n')}`;
     };
@@ -328,20 +312,20 @@ describeEval('Cross-skill consistency evals', () => {
     const collected = [
       extractGrepLines(reviewContent, 'review/SKILL.md'),
       extractGrepLines(shipContent, 'ship/SKILL.md'),
-      extractGrepLines(triageContent, 'review/greptile-triage.md'),
+      extractGrepLines(triageContent, 'review/coderabbit-triage.md'),
       extractGrepLines(retroContent, 'retro/SKILL.md'),
     ].join('\n\n');
 
     const result = await callJudge<{ consistent: boolean; issues: string[]; score: number; reasoning: string }>(`You are evaluating whether multiple skill configuration files implement the same data architecture consistently.
 
 INTENDED ARCHITECTURE:
-- greptile-history has TWO paths: per-project (~/.gstack/projects/{slug}/greptile-history.md) and global (~/.gstack/greptile-history.md)
+- coderabbit-history has TWO paths: per-project (~/.gstack/projects/{slug}/coderabbit-history.md) and global (~/.gstack/coderabbit-history.md)
 - /review and /ship WRITE to BOTH paths (per-project for suppressions, global for retro aggregation)
-- /review and /ship delegate write mechanics to greptile-triage.md
+- /review and /ship delegate write mechanics to coderabbit-triage.md
 - /retro READS from the GLOBAL path only (it aggregates across all projects)
 - REMOTE_SLUG derivation should be consistent across files that use it
 
-Below are greptile-related lines extracted from each skill file:
+Below are coderabbit-related lines extracted from each skill file:
 
 ${collected}
 
@@ -358,7 +342,7 @@ score (1-5): 5 = perfectly consistent, 1 = contradictory`);
     console.log('Cross-skill consistency:', JSON.stringify(result, null, 2));
 
     evalCollector?.addTest({
-      name: 'cross-skill greptile consistency',
+      name: 'cross-skill coderabbit consistency',
       suite: 'Cross-skill consistency evals',
       tier: 'llm-judge',
       passed: result.consistent && result.score >= 4,

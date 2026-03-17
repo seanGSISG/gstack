@@ -103,10 +103,10 @@
 - **`/ship` Step 5.5: TODOS.md management** — auto-detects completed items from the diff, marks them done with version annotations, offers to create/reorganize TODOS.md if missing or unstructured.
 - **Cross-skill TODOS awareness** — `/plan-ceo-review`, `/plan-eng-review`, `/retro`, `/review`, and `/qa` now read TODOS.md for project context. `/retro` adds Backlog Health metric (open counts, P0/P1 items, churn).
 - **Shared `review/TODOS-format.md`** — canonical TODO item format referenced by `/ship` and `/plan-ceo-review` to prevent format drift (DRY).
-- **Greptile 2-tier reply system** — Tier 1 (friendly, inline diff + explanation) for first responses; Tier 2 (firm, full evidence chain + re-rank request) when Greptile re-flags after a prior reply.
-- **Greptile reply templates** — structured templates in `greptile-triage.md` for fixes (inline diff), already-fixed (what was done), and false positives (evidence + suggested re-rank). Replaces vague one-line replies.
-- **Greptile escalation detection** — explicit algorithm to detect prior GStack replies on comment threads and auto-escalate to Tier 2.
-- **Greptile severity re-ranking** — replies now include `**Suggested re-rank:**` when Greptile miscategorizes issue severity.
+- **CodeRabbit 2-tier reply system** — Tier 1 (friendly, inline diff + explanation) for first responses; Tier 2 (firm, full evidence chain + re-rank request) when CodeRabbit re-flags after a prior reply.
+- **CodeRabbit reply templates** — structured templates in `coderabbit-triage.md` for fixes (inline diff), already-fixed (what was done), and false positives (evidence + suggested re-rank). Replaces vague one-line replies.
+- **CodeRabbit escalation detection** — explicit algorithm to detect prior GStack replies on comment threads and auto-escalate to Tier 2.
+- **CodeRabbit severity re-ranking** — replies now include `**Suggested re-rank:**` when CodeRabbit miscategorizes issue severity.
 - Static validation tests for `TODOS-format.md` references across skills.
 
 ### Fixed
@@ -114,7 +114,7 @@
 
 ### Changed
 - `TODO.md` deleted — all items merged into `TODOS.md`.
-- `/ship` Step 3.75 and `/review` Step 5 now reference reply templates and escalation detection from `greptile-triage.md`.
+- `/ship` Step 3.75 and `/review` Step 5 now reference reply templates and escalation detection from `coderabbit-triage.md`.
 - `/ship` Step 6 commit ordering includes TODOS.md in the final commit alongside VERSION + CHANGELOG.
 - `/ship` Step 8 PR body includes TODOS section.
 
@@ -200,7 +200,7 @@
 - **Random port selection** — server picks a random port 10000-60000 instead of scanning 9400-9409. No more CONDUCTOR_PORT magic offset. No more port collisions across workspaces.
 - **Binary version tracking** — state file includes `binaryVersion` SHA; CLI auto-restarts the server when the binary is rebuilt
 - **Legacy /tmp cleanup** — CLI scans for and removes old `/tmp/browse-server*.json` files, verifying PID ownership before sending signals
-- **Greptile integration** — `/review` and `/ship` fetch and triage Greptile bot comments; `/retro` tracks Greptile batting average across weeks
+- **CodeRabbit integration** — `/review` and `/ship` fetch and triage CodeRabbit bot comments; `/retro` tracks CodeRabbit batting average across weeks
 - **Local dev mode** — `bin/dev-setup` symlinks skills from the repo for in-place development; `bin/dev-teardown` restores global install
 - `help` command — agents can self-discover all commands and snapshot flags
 - Version-aware `find-browse` with META signal protocol — detects stale binaries and prompts agents to update
@@ -220,7 +220,7 @@
 - `/qa` SKILL.md now describes four modes (diff-aware, full, quick, regression) with diff-aware as the default on feature branches
 - `jsonResponse`/`errorResponse` use options objects to prevent positional parameter confusion
 - Build script compiles both `browse` and `find-browse` binaries, cleans up `.bun-build` temp files
-- README updated with Greptile setup instructions, diff-aware QA examples, and revised demo transcript
+- README updated with CodeRabbit setup instructions, diff-aware QA examples, and revised demo transcript
 
 ### Removed
 - `CONDUCTOR_PORT` magic offset (`browse_port = CONDUCTOR_PORT - 45600`)

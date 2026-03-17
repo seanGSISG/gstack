@@ -122,14 +122,14 @@ function dumpOutcomeDiagnostic(dir: string, label: string, report: string, judge
   } catch { /* non-fatal */ }
 }
 
-// Fail fast if Anthropic API is unreachable — don't burn through 13 tests getting ConnectionRefused
+// Fail fast if Claude CLI is unreachable — don't burn through 13 tests getting ConnectionRefused
 if (evalsEnabled) {
   const check = spawnSync('sh', ['-c', 'echo "ping" | claude -p --max-turns 1 --output-format stream-json --verbose --dangerously-skip-permissions'], {
     stdio: 'pipe', timeout: 30_000,
   });
   const output = check.stdout?.toString() || '';
   if (output.includes('ConnectionRefused') || output.includes('Unable to connect')) {
-    throw new Error('Anthropic API unreachable — aborting E2E suite. Fix connectivity and retry.');
+    throw new Error('Claude CLI unreachable — aborting E2E suite. Fix connectivity and retry.');
   }
 }
 
@@ -498,7 +498,7 @@ describeE2E('Review skill E2E', () => {
     // Copy review skill files
     fs.copyFileSync(path.join(ROOT, 'review', 'SKILL.md'), path.join(reviewDir, 'review-SKILL.md'));
     fs.copyFileSync(path.join(ROOT, 'review', 'checklist.md'), path.join(reviewDir, 'review-checklist.md'));
-    fs.copyFileSync(path.join(ROOT, 'review', 'greptile-triage.md'), path.join(reviewDir, 'review-greptile-triage.md'));
+    fs.copyFileSync(path.join(ROOT, 'review', 'coderabbit-triage.md'), path.join(reviewDir, 'review-coderabbit-triage.md'));
   });
 
   afterAll(() => {
@@ -556,7 +556,7 @@ describeE2E('Review enum completeness E2E', () => {
     // Copy review skill files
     fs.copyFileSync(path.join(ROOT, 'review', 'SKILL.md'), path.join(enumDir, 'review-SKILL.md'));
     fs.copyFileSync(path.join(ROOT, 'review', 'checklist.md'), path.join(enumDir, 'review-checklist.md'));
-    fs.copyFileSync(path.join(ROOT, 'review', 'greptile-triage.md'), path.join(enumDir, 'review-greptile-triage.md'));
+    fs.copyFileSync(path.join(ROOT, 'review', 'coderabbit-triage.md'), path.join(enumDir, 'review-coderabbit-triage.md'));
   });
 
   afterAll(() => {
@@ -599,9 +599,7 @@ The diff adds a new "returned" status to the Order model. Your job is to check i
 
 // --- B6/B7/B8: Planted-bug outcome evals ---
 
-// Outcome evals also need ANTHROPIC_API_KEY for the LLM judge
-const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-const describeOutcome = (evalsEnabled && hasApiKey) ? describe : describe.skip;
+const describeOutcome = evalsEnabled ? describe : describe.skip;
 
 describeOutcome('Planted-bug outcome evals', () => {
   let outcomeDir: string;
@@ -1396,7 +1394,7 @@ describeE2E('Base branch detection', () => {
     // Copy review skill files
     fs.copyFileSync(path.join(ROOT, 'review', 'SKILL.md'), path.join(dir, 'review-SKILL.md'));
     fs.copyFileSync(path.join(ROOT, 'review', 'checklist.md'), path.join(dir, 'review-checklist.md'));
-    fs.copyFileSync(path.join(ROOT, 'review', 'greptile-triage.md'), path.join(dir, 'review-greptile-triage.md'));
+    fs.copyFileSync(path.join(ROOT, 'review', 'coderabbit-triage.md'), path.join(dir, 'review-coderabbit-triage.md'));
 
     const result = await runSkillTest({
       prompt: `You are in a git repo on a feature branch with changes.

@@ -109,7 +109,7 @@ You are running the `/ship` workflow. This is a **non-interactive, fully automat
 - Test failures (stop, show failures)
 - Pre-landing review finds CRITICAL issues and user chooses to fix (not acknowledge or skip)
 - MINOR or MAJOR version bump needed (ask — see Step 4)
-- Greptile review comments that need user decision (complex fixes, false positives)
+- CodeRabbit review comments that need user decision (complex fixes, false positives)
 - TODOS.md missing and user wants to create one (ask — see Step 5.5)
 - TODOS.md disorganized and user wants to reorganize (ask — see Step 5.5)
 
@@ -261,17 +261,17 @@ Save the review output — it goes into the PR body in Step 8.
 
 ---
 
-## Step 3.75: Address Greptile review comments (if PR exists)
+## Step 3.75: Address CodeRabbit review comments (if PR exists)
 
-Read `.claude/skills/review/greptile-triage.md` and follow the fetch, filter, classify, and **escalation detection** steps.
+Read `.claude/skills/review/coderabbit-triage.md` and follow the fetch, filter, classify, and **escalation detection** steps.
 
-**If no PR exists, `gh` fails, API returns an error, or there are zero Greptile comments:** Skip this step silently. Continue to Step 4.
+**If no PR exists, `gh` fails, API returns an error, or there are zero CodeRabbit comments:** Skip this step silently. Continue to Step 4.
 
-**If Greptile comments are found:**
+**If CodeRabbit comments are found:**
 
-Include a Greptile summary in your output: `+ N Greptile comments (X valid, Y fixed, Z FP)`
+Include a CodeRabbit summary in your output: `+ N CodeRabbit comments (X valid, Y fixed, Z FP)`
 
-Before replying to any comment, run the **Escalation Detection** algorithm from greptile-triage.md to determine whether to use Tier 1 (friendly) or Tier 2 (firm) reply templates.
+Before replying to any comment, run the **Escalation Detection** algorithm from coderabbit-triage.md to determine whether to use Tier 1 (friendly) or Tier 2 (firm) reply templates.
 
 For each classified comment:
 
@@ -279,20 +279,20 @@ For each classified comment:
 - The comment (file:line or [top-level] + body summary + permalink URL)
 - `RECOMMENDATION: Choose A because [one-line reason]`
 - Options: A) Fix now, B) Acknowledge and ship anyway, C) It's a false positive
-- If user chooses A: apply the fix, commit the fixed files (`git add <fixed-files> && git commit -m "fix: address Greptile review — <brief description>"`), reply using the **Fix reply template** from greptile-triage.md (include inline diff + explanation), and save to both per-project and global greptile-history (type: fix).
-- If user chooses C: reply using the **False Positive reply template** from greptile-triage.md (include evidence + suggested re-rank), save to both per-project and global greptile-history (type: fp).
+- If user chooses A: apply the fix, commit the fixed files (`git add <fixed-files> && git commit -m "fix: address CodeRabbit review — <brief description>"`), reply using the **Fix reply template** from coderabbit-triage.md (include inline diff + explanation), and save to both per-project and global coderabbit-history (type: fix).
+- If user chooses C: reply using the **False Positive reply template** from coderabbit-triage.md (include evidence + suggested re-rank), save to both per-project and global coderabbit-history (type: fp).
 
-**VALID BUT ALREADY FIXED:** Reply using the **Already Fixed reply template** from greptile-triage.md — no AskUserQuestion needed:
+**VALID BUT ALREADY FIXED:** Reply using the **Already Fixed reply template** from coderabbit-triage.md — no AskUserQuestion needed:
 - Include what was done and the fixing commit SHA
-- Save to both per-project and global greptile-history (type: already-fixed)
+- Save to both per-project and global coderabbit-history (type: already-fixed)
 
 **FALSE POSITIVE:** Use AskUserQuestion:
 - Show the comment and why you think it's wrong (file:line or [top-level] + body summary + permalink URL)
 - Options:
-  - A) Reply to Greptile explaining the false positive (recommended if clearly wrong)
+  - A) Reply to CodeRabbit explaining the false positive (recommended if clearly wrong)
   - B) Fix it anyway (if trivial)
   - C) Ignore silently
-- If user chooses A: reply using the **False Positive reply template** from greptile-triage.md (include evidence + suggested re-rank), save to both per-project and global greptile-history (type: fp)
+- If user chooses A: reply using the **False Positive reply template** from coderabbit-triage.md (include evidence + suggested re-rank), save to both per-project and global coderabbit-history (type: fp)
 
 **SUPPRESSED:** Skip silently — these are known false positives from previous triage.
 
@@ -459,9 +459,9 @@ gh pr create --base <base> --title "<type>: <summary>" --body "$(cat <<'EOF'
 ## Eval Results
 <If evals ran: suite names, pass/fail counts, cost dashboard summary. If skipped: "No prompt-related files changed — evals skipped.">
 
-## Greptile Review
-<If Greptile comments were found: bullet list with [FIXED] / [FALSE POSITIVE] / [ALREADY FIXED] tag + one-line summary per comment>
-<If no Greptile comments found: "No Greptile comments.">
+## CodeRabbit Review
+<If CodeRabbit comments were found: bullet list with [FIXED] / [FALSE POSITIVE] / [ALREADY FIXED] tag + one-line summary per comment>
+<If no CodeRabbit comments found: "No CodeRabbit comments.">
 <If no PR existed during Step 3.75: omit this section entirely>
 
 ## TODOS
@@ -493,5 +493,5 @@ EOF
 - **Date format in CHANGELOG:** `YYYY-MM-DD`
 - **Split commits for bisectability** — each commit = one logical change.
 - **TODOS.md completion detection must be conservative.** Only mark items as completed when the diff clearly shows the work is done.
-- **Use Greptile reply templates from greptile-triage.md.** Every reply includes evidence (inline diff, code references, re-rank suggestion). Never post vague replies.
+- **Use CodeRabbit reply templates from coderabbit-triage.md.** Every reply includes evidence (inline diff, code references, re-rank suggestion). Never post vague replies.
 - **The goal is: user says `/ship`, next thing they see is the review + PR URL.**

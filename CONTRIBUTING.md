@@ -102,9 +102,8 @@ bin/dev-teardown
 ### Setup
 
 ```bash
-# 1. Copy .env.example and add your API key
-cp .env.example .env
-# Edit .env → set ANTHROPIC_API_KEY=sk-ant-...
+# 1. No API key needed — evals use `claude -p` subprocess
+#    (works with Claude Code Max subscription)
 
 # 2. Install deps (if you haven't already)
 bun install
@@ -188,7 +187,7 @@ Uses Claude Sonnet to score generated SKILL.md docs on three dimensions:
 Each dimension is scored 1-5. Threshold: every dimension must score **≥ 4**. There's also a regression test that compares generated docs against the hand-maintained baseline from `origin/main` — generated must score equal or higher.
 
 ```bash
-# Needs ANTHROPIC_API_KEY in .env — included in bun run test:evals
+# Uses claude -p subprocess — no API key needed
 ```
 
 - Uses `claude-sonnet-4-6` for scoring stability
@@ -234,7 +233,7 @@ If you're using [Conductor](https://conductor.build) to run multiple Claude Code
 
 When Conductor creates a new workspace, `bin/dev-setup` runs automatically. It detects the main worktree (via `git worktree list`), copies your `.env` so API keys carry over, and sets up dev mode — no manual steps needed.
 
-**First-time setup:** Put your `ANTHROPIC_API_KEY` in `.env` in the main repo (see `.env.example`). Every Conductor workspace inherits it automatically.
+**First-time setup:** No API key needed — evals use `claude -p` subprocess which works with your Claude Code Max subscription.
 
 ## Things to know
 
@@ -291,4 +290,4 @@ When you're happy with your skill edits:
 /ship
 ```
 
-This runs tests, reviews the diff, triages Greptile comments (with 2-tier escalation), manages TODOS.md, bumps the version, and opens a PR. See `ship/SKILL.md` for the full workflow.
+This runs tests, reviews the diff, triages CodeRabbit comments (with 2-tier escalation), manages TODOS.md, bumps the version, and opens a PR. See `ship/SKILL.md` for the full workflow.

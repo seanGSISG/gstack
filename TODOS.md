@@ -151,11 +151,11 @@
 
 ### Ship log — persistent record of /ship runs
 
-**What:** Append structured JSON entry to `.gstack/ship-log.json` at end of every /ship run (version, date, branch, PR URL, review findings, Greptile stats, todos completed, test results).
+**What:** Append structured JSON entry to `.gstack/ship-log.json` at end of every /ship run (version, date, branch, PR URL, review findings, CodeRabbit stats, todos completed, test results).
 
-**Why:** /retro has no structured data about shipping velocity. Ship log enables: PRs-per-week trending, review finding rates, Greptile signal over time, test suite growth.
+**Why:** /retro has no structured data about shipping velocity. Ship log enables: PRs-per-week trending, review finding rates, CodeRabbit signal over time, test suite growth.
 
-**Context:** /retro already reads greptile-history.md — same pattern. Eval persistence (eval-store.ts) shows the JSON append pattern exists in the codebase. ~15 lines in ship template.
+**Context:** /retro already reads coderabbit-history.md — same pattern. Eval persistence (eval-store.ts) shows the JSON append pattern exists in the codebase. ~15 lines in ship template.
 
 **Effort:** S
 **Priority:** P2
@@ -191,7 +191,7 @@
 
 **What:** /ship and /review post inline review comments at specific file:line locations using `gh api` to create pull request review comments.
 
-**Why:** Line-level annotations are more actionable than top-level comments. The PR thread becomes a line-by-line conversation between Greptile, Claude, and human reviewers.
+**Why:** Line-level annotations are more actionable than top-level comments. The PR thread becomes a line-by-line conversation between CodeRabbit, Claude, and human reviewers.
 
 **Context:** GitHub supports inline review comments via `gh api repos/$REPO/pulls/$PR/reviews`. Pairs naturally with Phase 3.6 visual annotations.
 
@@ -199,13 +199,13 @@
 **Priority:** P2
 **Depends on:** None
 
-### Greptile training feedback export
+### CodeRabbit training feedback export
 
-**What:** Aggregate greptile-history.md into machine-readable JSON summary of false positive patterns, exportable to the Greptile team for model improvement.
+**What:** Aggregate coderabbit-history.md into machine-readable JSON summary of false positive patterns, exportable to the CodeRabbit team for model improvement.
 
-**Why:** Closes the feedback loop — Greptile can use FP data to stop making the same mistakes on your codebase.
+**Why:** Closes the feedback loop — CodeRabbit can use FP data to stop making the same mistakes on your codebase.
 
-**Context:** Was a P3 Future Idea. Upgraded to P2 now that greptile-history.md data infrastructure exists. The signal data is already being collected; this just makes it exportable. ~40 lines.
+**Context:** Was a P3 Future Idea. Upgraded to P2 now that coderabbit-history.md data infrastructure exists. The signal data is already being collected; this just makes it exportable. ~40 lines.
 
 **Effort:** S
 **Priority:** P2
