@@ -40,7 +40,5 @@
     "ai-agent",
     "devtools"
   ],
-  "devDependencies": {
-    "@anthropic-ai/sdk": "^0.78.0"
-  }
+  "devDependencies": {}
 }

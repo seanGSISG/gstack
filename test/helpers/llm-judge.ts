@@ -4,10 +4,11 @@
  * Provides callJudge (generic JSON-from-LLM), judge (doc quality scorer),
  * and outcomeJudge (planted-bug detection scorer).
  *
- * Requires: ANTHROPIC_API_KEY env var
+ * Uses `claude -p` subprocess so evals work with Claude Code Max subscription
+ * (no ANTHROPIC_API_KEY required).
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { spawnSync } from 'child_process';
 
 export interface JudgeScore {
   clarity: number;       // 1-5
@@ -26,31 +27,42 @@ export interface OutcomeJudgeResult {
 }
 
 /**
- * Call claude-sonnet-4-6 with a prompt, extract JSON response.
- * Retries once on 429 rate limit errors.
+ * Call Claude Sonnet via `claude -p` subprocess, extract JSON response.
+ * Uses the Claude Code session (no API key needed).
  */
 export async function callJudge<T>(prompt: string): Promise<T> {
-  const client = new Anthropic();
+  // Strip CLAUDECODE env var to allow nesting claude -p inside Claude Code
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
 
-  const makeRequest = () => client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
+  const result = spawnSync('claude', ['-p', '--output-format', 'json', '--max-turns', '1', '--model', 'sonnet'], {
+    input: prompt,
+    encoding: 'utf-8',
+    timeout: 60_000,
+    env,
   });
 
-  let response;
-  try {
-    response = await makeRequest();
-  } catch (err: any) {
-    if (err.status === 429) {
-      await new Promise(r => setTimeout(r, 1000));
-      response = await makeRequest();
-    } else {
-      throw err;
+  if (result.error) {
+    if ((result.error as any).code === 'ENOENT') {
+      throw new Error('claude CLI not found. Install Claude Code or ensure it is in PATH.');
     }
+    throw new Error(`claude -p failed: ${result.error.message}`);
   }
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  if (result.signal === 'SIGTERM') {
+    throw new Error('claude -p timed out after 60s');
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`claude -p exited ${result.status}: ${(result.stderr || '').slice(0, 500)}`);
+  }
+
+  // Parse JSON output — claude --output-format json returns { result: "..." }
+  const stdout = result.stdout || '';
+  const parsed = JSON.parse(stdout);
+  const text = parsed.result || '';
+
+  // Extract JSON object from model response
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error(`Judge returned non-JSON: ${text.slice(0, 200)}`);
   return JSON.parse(jsonMatch[0]) as T;
